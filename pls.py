@@ -10,6 +10,8 @@ import discord
 import regex as re
 from twython import Twython
 
+PEGGLE2_URL = 'https://cdn.discordapp.com/attachments/386413466400981005/583770422303129600/image0.gif'
+
 
 class Pls(discord.Client):
     """pls, a Discord bot.
@@ -49,12 +51,12 @@ class Pls(discord.Client):
         # load config file, bail if it can't be loaded
         config_path = os.path.join(self._pls_dir, "config.json")
         try:
-            with open(config_path) as f:
-                self._settings = json.load(f)
-        except Exception as e:
+            with open(config_path) as file:
+                self._settings = json.load(file)
+        except Exception as err:
             self._logger.exception(
-                "Could not load config.json from {}.".format(config_path))
-            raise e
+                "Could not load config.json from %s.", config_path)
+            raise err
 
         # we'll try to connect to twitter later but let's predefine the attribute for now
         self._twitter = None
@@ -68,8 +70,8 @@ class Pls(discord.Client):
             if callable(item) and item.__name__.startswith("_event_"):
                 new_name = item.__name__.replace("_event_", "")
                 setattr(self, new_name, self.event(item))
-                self._logger.info("Remapping callable {} to event handler {}.".format(
-                    item.__name__, new_name))
+                self._logger.info("Remapping callable %s to event handler %s.",
+                                  item.__name__, new_name)
 
         # compile regexes
         # this regex will match twitter status URLs, like this: https://twitter.com/JillKatze/status/981417200878804992
@@ -77,6 +79,10 @@ class Pls(discord.Client):
         # this will skip links that have their preview hidden with <angle brackets>
         self.twitter_id_regex = re.compile(
             r"(?<!\<)(?:https?:\/\/(?:[^\.\s]*\.)?twitter\.com\/[^\s]*\/status\/(\d+)[^\s]*)(?!\>)")
+
+        self.peggle_2_regex = re.compile(
+            r"2\!$"
+        )
 
         # track which messages' embeds we've recently processed so we don't handle them multiple times
         self._processed_embeds = collections.deque(maxlen=1000)
@@ -122,7 +128,7 @@ class Pls(discord.Client):
                     return self._twitter.show_status(id=tweet_id, tweet_mode="extended")
                 except:
                     self._logger.exception(
-                        "Unable to load tweet. {} attempts remaining.".format(retries))
+                        "Unable to load tweet. %s attempts remaining.", retries)
                 await asyncio.sleep(1)
 
         return None
@@ -139,11 +145,11 @@ class Pls(discord.Client):
                     tweet_ids = self.twitter_id_regex.findall(url.lower())
                     for tweet_id in tweet_ids:
                         self._logger.debug(
-                            "Saw a new embed containing a tweet with id {}".format(tweet_id))
+                            "Saw a new embed containing a tweet with id %s", tweet_id)
 
                         tweet = await self._load_tweet(tweet_id)
 
-                        if tweet:
+                        if tweet and tweet.get("retweeted_status"):
                             tweet_text = html.unescape(tweet["full_text"])
 
                             # if a tweet has a picture attached, the final t.co link will be for those, and we should strip it because Discord does
@@ -182,6 +188,15 @@ class Pls(discord.Client):
                         self._logger.debug(
                             "Sent extra image links for tweet {}.".format(tweet_id))
 
+        peggle_2s = self.peggle_2_regex.findall(message.content.lower())
+
+        for peggle_2 in peggle_2s:
+            self._logger.debug(
+                "saw a new message containing peggle 2"
+            )
+
+            await message.channel.send(PEGGLE2_URL)
+
     async def _event_on_message_edit(self, before, after):
         """on_message_edit handler. This includes things such as the server appending an embed to a message.
         """
@@ -189,9 +204,9 @@ class Pls(discord.Client):
 
 
 if __name__ == "__main__":
-    pls = Pls()
+    PLS = Pls()
     try:
-        pls.run()
+        PLS.run()
     except:
         logging.getLogger('discord').exception(
             "Uncaught exception in run(). Exiting.")
